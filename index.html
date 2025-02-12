@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Newspaper Creator Pro - Create and edit newspaper layouts">
     <title>Newspaper Creator Pro</title>
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -10,15 +11,13 @@
     <div id="workspace">
         <canvas id="drawing-layer"></canvas>
     </div>
-
     <div class="toolbar">
-        <button class="tool-button" id="addText">Add Text</button>
-        <button class="tool-button" id="addImage">Add Image</button>
-        <button class="tool-button" id="draw">Draw</button>
-        <button class="tool-button" id="save">Save</button>
-        <button class="tool-button" id="load">Load</button>
+        <button class="tool-button" id="addText" aria-label="Add Text">Add Text</button>
+        <button class="tool-button" id="addImage" aria-label="Add Image">Add Image</button>
+        <button class="tool-button" id="draw" aria-label="Draw">Draw</button>
+        <button class="tool-button" id="save" aria-label="Save">Save</button>
+        <button class="tool-button" id="load" aria-label="Load">Load</button>
     </div>
-
     <script src="app.js"></script>
 </body>
 </html>
