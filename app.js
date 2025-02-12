@@ -3,13 +3,29 @@ class NewspaperCreatorPro {
         this.workspace = document.getElementById('workspace');
         this.drawingLayer = document.getElementById('drawing-layer');
         this.ctx = this.drawingLayer.getContext('2d');
+        this.isDrawing = false;
         this.setupCanvas();
         this.bindEvents();
+        this.handleResize();
+    }
+
+    handleResize() {
+        window.addEventListener('resize', () => {
+            this.setupCanvas();
+        });
     }
 
     setupCanvas() {
-        this.drawingLayer.width = window.innerWidth;
-        this.drawingLayer.height = window.innerHeight;
+        const dpr = window.devicePixelRatio || 1;
+        const rect = this.workspace.getBoundingClientRect();
+        
+        this.drawingLayer.width = rect.width * dpr;
+        this.drawingLayer.height = rect.height * dpr;
+        
+        this.ctx.scale(dpr, dpr);
+        this.ctx.lineCap = 'round';
+        this.ctx.lineJoin = 'round';
+        this.ctx.lineWidth = 2;
     }
 
     createDraggableElement(type, content) {
@@ -38,7 +54,6 @@ class NewspaperCreatorPro {
     }
 
     addImageControls(element) {
-        // Add scaling handles
         ['top-left', 'top-right', 'bottom-left', 'bottom-right'].forEach(position => {
             const handle = document.createElement('div');
             handle.className = `scale-handle ${position}`;
@@ -46,13 +61,11 @@ class NewspaperCreatorPro {
             this.initializeScaling(element, handle, position);
         });
 
-        // Add rotation handle
         const rotateHandle = document.createElement('div');
         rotateHandle.className = 'rotate-handle';
         element.appendChild(rotateHandle);
         this.initializeRotation(element, rotateHandle);
 
-        // Add control buttons
         const controls = document.createElement('div');
         controls.className = 'image-controls';
         controls.innerHTML = `
@@ -82,7 +95,6 @@ class NewspaperCreatorPro {
                 initialX = e.clientX - xOffset;
                 initialY = e.clientY - yOffset;
             }
-
             if (e.target === element) {
                 isDragging = true;
             }
@@ -91,7 +103,6 @@ class NewspaperCreatorPro {
         const drag = (e) => {
             if (isDragging) {
                 e.preventDefault();
-
                 if (e.type === "touchmove") {
                     currentX = e.touches[0].clientX - initialX;
                     currentY = e.touches[0].clientY - initialY;
@@ -99,10 +110,8 @@ class NewspaperCreatorPro {
                     currentX = e.clientX - initialX;
                     currentY = e.clientY - initialY;
                 }
-
                 xOffset = currentX;
                 yOffset = currentY;
-
                 setTranslate(currentX, currentY, element);
             }
         };
@@ -147,7 +156,6 @@ class NewspaperCreatorPro {
             
             const deltaX = currentX - startX;
             const deltaY = currentY - startY;
-
             let newWidth = startWidth;
             let newHeight = startHeight;
 
@@ -196,6 +204,7 @@ class NewspaperCreatorPro {
                 x: rect.left + rect.width / 2,
                 y: rect.top + rect.height / 2
             };
+
             startAngle = Math.atan2(
                 e.type.includes('touch') ? e.touches[0].clientY - center.y : e.clientY - center.y,
                 e.type.includes('touch') ? e.touches[0].clientX - center.x : e.clientX - center.x
@@ -264,27 +273,34 @@ class NewspaperCreatorPro {
         });
     }
 
+    handleImageUpload() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file && file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    this.createDraggableElement('image', event.target.result);
+                };
+                reader.onerror = () => {
+                    alert('Error loading image. Please try again.');
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+        
+        input.click();
+    }
+
     bindEvents() {
         document.getElementById('addText').onclick = () => this.createDraggableElement('text');
         document.getElementById('addImage').onclick = () => this.handleImageUpload();
         document.getElementById('draw').onclick = () => this.toggleDrawing();
         document.getElementById('save').onclick = () => this.saveState();
         document.getElementById('load').onclick = () => this.loadState();
-    }
-
-        handleImageUpload() {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-        input.onchange = (e) => {
-            const file = e.target.files[0];
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                this.createDraggableElement('image', event.target.result);
-            };
-            reader.readAsDataURL(file);
-        };
-        input.click();
     }
 
     toggleDrawing() {
@@ -301,7 +317,7 @@ class NewspaperCreatorPro {
             if (!isDrawing) return;
             const x = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
             const y = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-
+            
             this.ctx.beginPath();
             this.ctx.moveTo(lastX, lastY);
             this.ctx.lineTo(x, y);
@@ -330,16 +346,23 @@ class NewspaperCreatorPro {
     }
 
     saveState() {
-        const state = {
-            elements: Array.from(document.querySelectorAll('.draggable')).map(el => ({
-                type: el.dataset.type,
-                content: el.dataset.type === 'text' ? el.textContent : el.querySelector('img').src,
-                style: el.style.cssText
-            })),
-            drawing: this.drawingLayer.toDataURL()
-        };
-        localStorage.setItem('newspaperState', JSON.stringify(state));
-        alert('Project saved successfully!');
+        try {
+            const state = {
+                elements: Array.from(document.querySelectorAll('.draggable')).map(el => ({
+                    type: el.dataset.type,
+                    content: el.dataset.type === 'text' ? el.textContent : el.querySelector('img')?.src,
+                    style: el.style.cssText,
+                    transform: el.style.transform
+                })),
+                drawing: this.drawingLayer.toDataURL()
+            };
+            
+            localStorage.setItem('newspaperState', JSON.stringify(state));
+            alert('Project saved successfully!');
+        } catch (error) {
+            console.error('Save failed:', error);
+            alert('Failed to save project. Please try again.');
+        }
     }
 
     loadState() {
@@ -361,8 +384,11 @@ class NewspaperCreatorPro {
     }
 }
 
-// Initialize the app
 document.addEventListener('DOMContentLoaded', () => {
-    new NewspaperCreatorPro();
+    try {
+        window.app = new NewspaperCreatorPro();
+    } catch (error) {
+        console.error('Failed to initialize app:', error);
+        alert('Failed to start application. Please refresh the page.');
+    }
 });
-
