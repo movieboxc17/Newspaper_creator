@@ -13,6 +13,7 @@
             -webkit-touch-callout: none;
             -webkit-user-select: none;
             user-select: none;
+            touch-action: none;
         }
 
         .toolbar {
@@ -56,16 +57,35 @@
 
         .draggable {
             position: absolute;
-            background: transparent;
+            background: rgba(255, 255, 255, 0.9);
             padding: 10px;
             cursor: move;
             border-radius: 5px;
             min-width: 50px;
             min-height: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            touch-action: none;
         }
 
         .draggable:focus {
             outline: 2px solid #007AFF;
+        }
+
+        .draggable img {
+            max-width: 300px;
+            height: auto;
+            display: block;
+        }
+
+        .resize-handle {
+            width: 20px;
+            height: 20px;
+            background: #007AFF;
+            position: absolute;
+            right: -10px;
+            bottom: -10px;
+            border-radius: 50%;
+            cursor: se-resize;
         }
 
         .controls {
@@ -74,7 +94,7 @@
             backdrop-filter: blur(10px);
             padding: 10px;
             border-radius: 10px;
-            display: none;
+            display: flex;
             gap: 5px;
             z-index: 100;
         }
@@ -89,14 +109,6 @@
             height: 40px;
             padding: 0;
             border: none;
-        }
-
-        .template {
-            position: absolute;
-            background: white;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            border-radius: 10px;
-            padding: 20px;
         }
 
         #drawing-layer {
@@ -125,32 +137,14 @@
         <button class="tool-button" id="load">Load</button>
     </div>
 
-    <div class="controls" id="textControls">
-        <input type="range" class="size-slider" min="12" max="72" value="16">
-        <input type="color" class="color-picker">
-        <select class="font-select">
-            <option value="Arial">Arial</option>
-            <option value="Times New Roman">Times</option>
-            <option value="Georgia">Georgia</option>
-            <option value="Helvetica">Helvetica</option>
-            <option value="SF Pro">SF Pro</option>
-        </select>
-    </div>
-
     <script>
         class NewspaperCreatorPro {
             constructor() {
                 this.workspace = document.getElementById('workspace');
                 this.drawingLayer = document.getElementById('drawing-layer');
                 this.ctx = this.drawingLayer.getContext('2d');
-                this.elements = [];
-                this.isDragging = false;
-                this.isDrawing = false;
-                this.selectedElement = null;
-                
                 this.setupCanvas();
                 this.bindEvents();
-                this.initializeTouchEvents();
             }
 
             setupCanvas() {
@@ -169,48 +163,125 @@
                 } else if (type === 'image') {
                     const img = document.createElement('img');
                     img.src = content;
-                    img.style.maxWidth = '300px';
-                    img.style.height = 'auto';
                     element.appendChild(img);
                 }
+
+                const resizeHandle = document.createElement('div');
+                resizeHandle.className = 'resize-handle';
+                element.appendChild(resizeHandle);
 
                 element.style.left = '50%';
                 element.style.top = '50%';
                 element.style.transform = 'translate(-50%, -50%)';
                 
                 this.workspace.appendChild(element);
-                this.makeElementDraggable(element);
+                this.initializeDragging(element);
+                this.initializeResizing(element, resizeHandle);
                 
                 return element;
             }
 
-            makeElementDraggable(element) {
-                let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-                
-                const dragMouseDown = (e) => {
-                    e.preventDefault();
-                    pos3 = e.clientX;
-                    pos4 = e.clientY;
-                    document.onmouseup = closeDragElement;
-                    document.onmousemove = elementDrag;
+            initializeDragging(element) {
+                let isDragging = false;
+                let currentX;
+                let currentY;
+                let initialX;
+                let initialY;
+                let xOffset = 0;
+                let yOffset = 0;
+
+                const dragStart = (e) => {
+                    if (e.type === "touchstart") {
+                        initialX = e.touches[0].clientX - xOffset;
+                        initialY = e.touches[0].clientY - yOffset;
+                    } else {
+                        initialX = e.clientX - xOffset;
+                        initialY = e.clientY - yOffset;
+                    }
+
+                    if (e.target === element) {
+                        isDragging = true;
+                    }
                 };
 
-                const elementDrag = (e) => {
-                    e.preventDefault();
-                    pos1 = pos3 - e.clientX;
-                    pos2 = pos4 - e.clientY;
-                    pos3 = e.clientX;
-                    pos4 = e.clientY;
-                    element.style.top = (element.offsetTop - pos2) + "px";
-                    element.style.left = (element.offsetLeft - pos1) + "px";
+                const drag = (e) => {
+                    if (isDragging) {
+                        e.preventDefault();
+
+                        if (e.type === "touchmove") {
+                            currentX = e.touches[0].clientX - initialX;
+                            currentY = e.touches[0].clientY - initialY;
+                        } else {
+                            currentX = e.clientX - initialX;
+                            currentY = e.clientY - initialY;
+                        }
+
+                        xOffset = currentX;
+                        yOffset = currentY;
+
+                        setTranslate(currentX, currentY, element);
+                    }
                 };
 
-                const closeDragElement = () => {
-                    document.onmouseup = null;
-                    document.onmousemove = null;
+                const dragEnd = () => {
+                    initialX = currentX;
+                    initialY = currentY;
+                    isDragging = false;
                 };
 
-                element.onmousedown = dragMouseDown;
+                const setTranslate = (xPos, yPos, el) => {
+                    el.style.transform = `translate(${xPos}px, ${yPos}px)`;
+                };
+
+                element.addEventListener("touchstart", dragStart, false);
+                element.addEventListener("touchend", dragEnd, false);
+                element.addEventListener("touchmove", drag, false);
+
+                element.addEventListener("mousedown", dragStart, false);
+                element.addEventListener("mouseup", dragEnd, false);
+                element.addEventListener("mousemove", drag, false);
+            }
+
+            initializeResizing(element, handle) {
+                let isResizing = false;
+                let originalWidth;
+                let originalHeight;
+                let originalX;
+                let originalY;
+
+                const startResize = (e) => {
+                    isResizing = true;
+                    originalWidth = element.offsetWidth;
+                    originalHeight = element.offsetHeight;
+                    originalX = e.clientX || e.touches[0].clientX;
+                    originalY = e.clientY || e.touches[0].clientY;
+                };
+
+                const resize = (e) => {
+                    if (!isResizing) return;
+
+                    const currentX = e.clientX || e.touches[0].clientX;
+                    const currentY = e.clientY || e.touches[0].clientY;
+
+                    const width = originalWidth + (currentX - originalX);
+                    const height = originalHeight + (currentY - originalY);
+
+                    element.style.width = width + 'px';
+                    element.style.height = height + 'px';
+                };
+
+                const stopResize = () => {
+                    isResizing = false;
+                };
+
+                handle.addEventListener('mousedown', startResize);
+                handle.addEventListener('touchstart', startResize);
+
+                document.addEventListener('mousemove', resize);
+                document.addEventListener('touchmove', resize);
+
+                document.addEventListener('mouseup', stopResize);
+                document.addEventListener('touchend', stopResize);
             }
 
             bindEvents() {
@@ -237,31 +308,47 @@
             }
 
             toggleDrawing() {
-                this.isDrawing = !this.isDrawing;
                 this.drawingLayer.classList.toggle('drawing-active');
+                this.initializeDrawing();
             }
 
-            initializeTouchEvents() {
-                let lastX, lastY;
+            initializeDrawing() {
+                let isDrawing = false;
+                let lastX = 0;
+                let lastY = 0;
 
-                this.drawingLayer.addEventListener('touchstart', (e) => {
-                    if (!this.isDrawing) return;
-                    const touch = e.touches[0];
-                    lastX = touch.clientX;
-                    lastY = touch.clientY;
-                });
+                const draw = (e) => {
+                    if (!isDrawing) return;
+                    const x = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                    const y = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
 
-                this.drawingLayer.addEventListener('touchmove', (e) => {
-                    if (!this.isDrawing) return;
-                    e.preventDefault();
-                    const touch = e.touches[0];
                     this.ctx.beginPath();
                     this.ctx.moveTo(lastX, lastY);
-                    this.ctx.lineTo(touch.clientX, touch.clientY);
+                    this.ctx.lineTo(x, y);
                     this.ctx.stroke();
-                    lastX = touch.clientX;
-                    lastY = touch.clientY;
-                });
+                    [lastX, lastY] = [x, y];
+                };
+
+                const startDrawing = (e) => {
+                    isDrawing = true;
+                    [lastX, lastY] = [
+                        e.type.includes('touch') ? e.touches[0].clientX : e.clientX,
+                        e.type.includes('touch') ? e.touches[0].clientY : e.clientY
+                    ];
+                };
+
+                const stopDrawing = () => {
+                    isDrawing = false;
+                };
+
+                this.drawingLayer.addEventListener('mousedown', startDrawing);
+                this.drawingLayer.addEventListener('touchstart', startDrawing);
+
+                this.drawingLayer.addEventListener('mousemove', draw);
+                this.drawingLayer.addEventListener('touchmove', draw);
+
+                this.drawingLayer.addEventListener('mouseup', stopDrawing);
+                this.drawingLayer.addEventListener('touchend', stopDrawing);
             }
 
             saveState() {
@@ -274,7 +361,7 @@
                     drawing: this.drawingLayer.toDataURL()
                 };
                 localStorage.setItem('newspaperState', JSON.stringify(state));
-                alert('Project saved!');
+                alert('Project saved successfully!');
             }
 
             loadState() {
