@@ -4,15 +4,53 @@ class NewspaperCreatorPro {
         this.drawingLayer = document.getElementById('drawing-layer');
         this.ctx = this.drawingLayer.getContext('2d');
         this.isDrawing = false;
+        this.isIPad = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        this.selectedElement = null;
+        
         this.setupCanvas();
+        this.setupTouchSpecificBehavior();
         this.bindEvents();
         this.handleResize();
     }
 
+    setupTouchSpecificBehavior() {
+        if (this.isIPad) {
+            this.workspace.addEventListener('touchmove', (e) => {
+                if (e.touches.length > 1) {
+                    e.preventDefault();
+                }
+            }, { passive: false });
+
+            this.setupGestureRecognition();
+        }
+    }
+
+    setupGestureRecognition() {
+        let initialPinchDistance = 0;
+        let initialRotation = 0;
+
+        this.workspace.addEventListener('gesturestart', (e) => {
+            e.preventDefault();
+            initialPinchDistance = e.scale;
+            initialRotation = e.rotation;
+        });
+
+        this.workspace.addEventListener('gesturechange', (e) => {
+            e.preventDefault();
+            if (this.selectedElement) {
+                const scale = e.scale / initialPinchDistance;
+                const rotation = e.rotation - initialRotation;
+                this.selectedElement.style.transform = 
+                    `scale(${scale}) rotate(${rotation}deg)`;
+            }
+        });
+    }
+
     handleResize() {
-        window.addEventListener('resize', () => {
+        const resizeObserver = new ResizeObserver(() => {
             this.setupCanvas();
         });
+        resizeObserver.observe(this.workspace);
     }
 
     setupCanvas() {
@@ -35,10 +73,12 @@ class NewspaperCreatorPro {
         
         if (type === 'text') {
             element.contentEditable = true;
-            element.textContent = content || 'Double tap to edit';
+            element.textContent = content || 'Tap to edit';
+            this.setupTextElementBehavior(element);
         } else if (type === 'image') {
             const img = document.createElement('img');
             img.src = content;
+            img.draggable = false;
             element.appendChild(img);
             this.addImageControls(element);
         }
@@ -53,25 +93,25 @@ class NewspaperCreatorPro {
         return element;
     }
 
-    addImageControls(element) {
-        ['top-left', 'top-right', 'bottom-left', 'bottom-right'].forEach(position => {
-            const handle = document.createElement('div');
-            handle.className = `scale-handle ${position}`;
-            element.appendChild(handle);
-            this.initializeScaling(element, handle, position);
+    setupTextElementBehavior(element) {
+        element.addEventListener('focus', () => {
+            element.classList.add('editing');
+            element.style.cursor = 'text';
         });
 
-        const rotateHandle = document.createElement('div');
-        rotateHandle.className = 'rotate-handle';
-        element.appendChild(rotateHandle);
-        this.initializeRotation(element, rotateHandle);
+        element.addEventListener('blur', () => {
+            element.classList.remove('editing');
+            element.style.cursor = 'move';
+        });
+    }
 
+    addImageControls(element) {
         const controls = document.createElement('div');
         controls.className = 'image-controls';
         controls.innerHTML = `
             <button class="image-control-btn" data-action="flip">↔️</button>
+            <button class="image-control-btn" data-action="rotate">🔄</button>
             <button class="image-control-btn" data-action="brightness">☀️</button>
-            <button class="image-control-btn" data-action="contrast">◐</button>
             <button class="image-control-btn" data-action="delete">🗑️</button>
         `;
         element.appendChild(controls);
@@ -86,23 +126,32 @@ class NewspaperCreatorPro {
         let initialY;
         let xOffset = 0;
         let yOffset = 0;
+        let touchTimeout;
 
         const dragStart = (e) => {
             if (e.type === "touchstart") {
+                touchTimeout = setTimeout(() => {
+                    element.classList.add('selected');
+                    this.selectedElement = element;
+                }, 200);
+
                 initialX = e.touches[0].clientX - xOffset;
                 initialY = e.touches[0].clientY - yOffset;
             } else {
                 initialX = e.clientX - xOffset;
                 initialY = e.clientY - yOffset;
             }
-            if (e.target === element) {
+
+            if (e.target === element || e.target.parentNode === element) {
                 isDragging = true;
+                element.classList.add('dragging');
             }
         };
 
         const drag = (e) => {
             if (isDragging) {
                 e.preventDefault();
+                
                 if (e.type === "touchmove") {
                     currentX = e.touches[0].clientX - initialX;
                     currentY = e.touches[0].clientY - initialY;
@@ -110,138 +159,30 @@ class NewspaperCreatorPro {
                     currentX = e.clientX - initialX;
                     currentY = e.clientY - initialY;
                 }
+
                 xOffset = currentX;
                 yOffset = currentY;
-                setTranslate(currentX, currentY, element);
+                
+                requestAnimationFrame(() => {
+                    element.style.transform = `translate(${currentX}px, ${currentY}px)`;
+                });
             }
         };
 
         const dragEnd = () => {
+            clearTimeout(touchTimeout);
             initialX = currentX;
             initialY = currentY;
             isDragging = false;
+            element.classList.remove('dragging');
         };
 
-        const setTranslate = (xPos, yPos, el) => {
-            el.style.transform = `translate(${xPos}px, ${yPos}px)`;
-        };
-
-        element.addEventListener("touchstart", dragStart, false);
-        element.addEventListener("touchend", dragEnd, false);
-        element.addEventListener("touchmove", drag, false);
-        element.addEventListener("mousedown", dragStart, false);
-        element.addEventListener("mouseup", dragEnd, false);
-        element.addEventListener("mousemove", drag, false);
-    }
-
-    initializeScaling(element, handle, position) {
-        let startX, startY, startWidth, startHeight;
-
-        const startScale = (e) => {
-            e.stopPropagation();
-            startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-            startY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-            startWidth = element.offsetWidth;
-            startHeight = element.offsetHeight;
-            
-            document.addEventListener('mousemove', scale);
-            document.addEventListener('touchmove', scale);
-            document.addEventListener('mouseup', stopScale);
-            document.addEventListener('touchend', stopScale);
-        };
-
-        const scale = (e) => {
-            const currentX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-            const currentY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-            
-            const deltaX = currentX - startX;
-            const deltaY = currentY - startY;
-            let newWidth = startWidth;
-            let newHeight = startHeight;
-
-            switch(position) {
-                case 'top-left':
-                    newWidth = startWidth - deltaX;
-                    newHeight = startHeight - deltaY;
-                    break;
-                case 'top-right':
-                    newWidth = startWidth + deltaX;
-                    newHeight = startHeight - deltaY;
-                    break;
-                case 'bottom-left':
-                    newWidth = startWidth - deltaX;
-                    newHeight = startHeight + deltaY;
-                    break;
-                case 'bottom-right':
-                    newWidth = startWidth + deltaX;
-                    newHeight = startHeight + deltaY;
-                    break;
-            }
-
-            element.style.width = `${Math.max(50, newWidth)}px`;
-            element.style.height = `${Math.max(50, newHeight)}px`;
-        };
-
-        const stopScale = () => {
-            document.removeEventListener('mousemove', scale);
-            document.removeEventListener('touchmove', scale);
-            document.removeEventListener('mouseup', stopScale);
-            document.removeEventListener('touchend', stopScale);
-        };
-
-        handle.addEventListener('mousedown', startScale);
-        handle.addEventListener('touchstart', startScale);
-    }
-
-    initializeRotation(element, handle) {
-        let rotation = 0;
-        let startAngle = 0;
-
-        const startRotate = (e) => {
-            e.stopPropagation();
-            const rect = element.getBoundingClientRect();
-            const center = {
-                x: rect.left + rect.width / 2,
-                y: rect.top + rect.height / 2
-            };
-
-            startAngle = Math.atan2(
-                e.type.includes('touch') ? e.touches[0].clientY - center.y : e.clientY - center.y,
-                e.type.includes('touch') ? e.touches[0].clientX - center.x : e.clientX - center.x
-            );
-            
-            document.addEventListener('mousemove', rotate);
-            document.addEventListener('touchmove', rotate);
-            document.addEventListener('mouseup', stopRotate);
-            document.addEventListener('touchend', stopRotate);
-        };
-
-        const rotate = (e) => {
-            const rect = element.getBoundingClientRect();
-            const center = {
-                x: rect.left + rect.width / 2,
-                y: rect.top + rect.height / 2
-            };
-            
-            const currentAngle = Math.atan2(
-                e.type.includes('touch') ? e.touches[0].clientY - center.y : e.clientY - center.y,
-                e.type.includes('touch') ? e.touches[0].clientX - center.x : e.clientX - center.x
-            );
-            
-            rotation += currentAngle - startAngle;
-            element.style.transform = `rotate(${rotation}rad)`;
-            startAngle = currentAngle;
-        };
-
-        const stopRotate = () => {
-            document.removeEventListener('mousemove', rotate);
-            document.removeEventListener('touchmove', rotate);
-            document.removeEventListener('mouseup', stopRotate);
-            document.removeEventListener('touchend', stopRotate);
-        };
-
-        handle.addEventListener('mousedown', startRotate);
-        handle.addEventListener('touchstart', startRotate);
+        element.addEventListener("touchstart", dragStart, { passive: true });
+        element.addEventListener("touchend", dragEnd);
+        element.addEventListener("touchmove", drag, { passive: false });
+        element.addEventListener("mousedown", dragStart);
+        element.addEventListener("mouseup", dragEnd);
+        element.addEventListener("mousemove", drag);
     }
 
     initializeImageControls(element) {
@@ -256,15 +197,16 @@ class NewspaperCreatorPro {
                         ? 'scaleX(1)' 
                         : 'scaleX(-1)';
                     break;
+                case 'rotate':
+                    const currentRotation = parseInt(img.dataset.rotation || 0);
+                    const newRotation = currentRotation + 90;
+                    img.style.transform = `rotate(${newRotation}deg)`;
+                    img.dataset.rotation = newRotation;
+                    break;
                 case 'brightness':
                     img.style.filter = img.style.filter.includes('brightness')
                         ? ''
                         : 'brightness(1.2)';
-                    break;
-                case 'contrast':
-                    img.style.filter = img.style.filter.includes('contrast')
-                        ? ''
-                        : 'contrast(1.2)';
                     break;
                 case 'delete':
                     element.remove();
@@ -285,9 +227,6 @@ class NewspaperCreatorPro {
                 reader.onload = (event) => {
                     this.createDraggableElement('image', event.target.result);
                 };
-                reader.onerror = () => {
-                    alert('Error loading image. Please try again.');
-                };
                 reader.readAsDataURL(file);
             }
         };
@@ -301,11 +240,23 @@ class NewspaperCreatorPro {
         document.getElementById('draw').onclick = () => this.toggleDrawing();
         document.getElementById('save').onclick = () => this.saveState();
         document.getElementById('load').onclick = () => this.loadState();
+
+        // Clear selection when tapping workspace
+        this.workspace.addEventListener('click', (e) => {
+            if (e.target === this.workspace) {
+                this.selectedElement = null;
+                document.querySelectorAll('.draggable.selected').forEach(el => {
+                    el.classList.remove('selected');
+                });
+            }
+        });
     }
 
     toggleDrawing() {
         this.drawingLayer.classList.toggle('drawing-active');
-        this.initializeDrawing();
+        if (this.drawingLayer.classList.contains('drawing-active')) {
+            this.initializeDrawing();
+        }
     }
 
     initializeDrawing() {
@@ -315,6 +266,7 @@ class NewspaperCreatorPro {
 
         const draw = (e) => {
             if (!isDrawing) return;
+            
             const x = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
             const y = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
             
@@ -366,29 +318,32 @@ class NewspaperCreatorPro {
     }
 
     loadState() {
-        const state = JSON.parse(localStorage.getItem('newspaperState'));
-        if (state) {
-            this.workspace.innerHTML = '';
-            state.elements.forEach(el => {
-                const element = this.createDraggableElement(el.type, el.content);
-                element.style.cssText = el.style;
-            });
-            
-            const img = new Image();
-            img.onload = () => {
+        try {
+            const state = JSON.parse(localStorage.getItem('newspaperState'));
+            if (state) {
+                this.workspace.innerHTML = '';
                 this.ctx.clearRect(0, 0, this.drawingLayer.width, this.drawingLayer.height);
-                this.ctx.drawImage(img, 0, 0);
-            };
-            img.src = state.drawing;
+                
+                state.elements.forEach(el => {
+                    const element = this.createDraggableElement(el.type, el.content);
+                    element.style.cssText = el.style;
+                });
+                
+                if (state.drawing) {
+                    const img = new Image();
+                    img.onload = () => {
+                        this.ctx.drawImage(img, 0, 0);
+                    };
+                    img.src = state.drawing;
+                }
+            }
+        } catch (error) {
+            console.error('Load failed:', error);
+            alert('Failed to load project. Please try again.');
         }
     }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    try {
-        window.app = new NewspaperCreatorPro();
-    } catch (error) {
-        console.error('Failed to initialize app:', error);
-        alert('Failed to start application. Please refresh the page.');
-    }
+    window.app = new NewspaperCreatorPro();
 });
