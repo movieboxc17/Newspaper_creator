@@ -1,72 +1,23 @@
-// Add these methods to your NewspaperCreatorPro class
-
-setupPinchZoom(element) {
-    let initialDistance = 0;
-    let currentScale = 1;
-
-    element.addEventListener('touchstart', (e) => {
-        if (e.touches.length === 2) {
-            initialDistance = getDistance(e.touches[0], e.touches[1]);
-        }
-    });
-
-    element.addEventListener('touchmove', (e) => {
-        if (e.touches.length === 2) {
-            const currentDistance = getDistance(e.touches[0], e.touches[1]);
-            const scale = currentDistance / initialDistance;
-            currentScale = Math.min(Math.max(scale, 0.5), 3); // Limit scale between 0.5 and 3
-            element.style.transform = `scale(${currentScale})`;
-        }
-    });
-
-    function getDistance(touch1, touch2) {
-        return Math.hypot(
-            touch2.clientX - touch1.clientX,
-            touch2.clientY - touch1.clientY
-        );
-    }
-}
-
-// Enhanced text element creation
-createTextElement() {
-    const textBox = this.createDraggableElement('text');
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'text-delete-btn';
-    deleteBtn.innerHTML = '×';
-    deleteBtn.onclick = () => textBox.remove();
-    
-    const controls = document.createElement('div');
-    controls.className = 'text-controls';
-    controls.innerHTML = `
-        <button class="text-control-btn" data-action="color">🎨</button>
-        <button class="text-control-btn" data-action="bold">B</button>
-        <button class="text-control-btn" data-action="italic">I</button>
-        <button class="text-control-btn" data-action="fontSize">Aa</button>
-    `;
-    
-    textBox.appendChild(deleteBtn);
-    textBox.appendChild(controls);
-    this.setupPinchZoom(textBox);
-    this.initializeTextControls(textBox);
-}
-
-initializeTextControls(element) {
-    const controls = element.querySelector('.text-controls');
-    controls.addEventListener('click', (e) => {
-        const action = e.target.dataset.action;
-        switch(action) {
-            case 'color':
-                this.showColorPicker(element);
-                break;
-            case 'bold':
-                element.style.fontWeight = element.style.fontWeight === 'bold' ? 'normal' : 'bold';
-                break;
-            case 'italic':
-                element.style.fontStyle = element.style.fontStyle === 'italic' ? 'normal' : 'italic';
-                break;
-            case 'fontSize':
-                this.toggleFontSizeMenu(element);
-                break;
-        }
-    });
-}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Newspaper Creator Pro - Create and edit newspaper layouts">
+    <title>Newspaper Creator Pro</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="workspace">
+        <canvas id="drawing-layer"></canvas>
+    </div>
+    <div class="toolbar">
+        <button class="tool-button" id="addText" aria-label="Add Text">Add Text</button>
+        <button class="tool-button" id="addImage" aria-label="Add Image">Add Image</button>
+        <button class="tool-button" id="draw" aria-label="Draw">Draw</button>
+        <button class="tool-button" id="save" aria-label="Save">Save</button>
+        <button class="tool-button" id="load" aria-label="Load">Load</button>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
