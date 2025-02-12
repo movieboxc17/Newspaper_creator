@@ -272,8 +272,97 @@ class NewspaperCreatorPro {
         document.getElementById('load').onclick = () => this.loadState();
     }
 
-    handleImageUpload() {
+        handleImageUpload() {
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*';
-        input.onchange =
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                this.createDraggableElement('image', event.target.result);
+            };
+            reader.readAsDataURL(file);
+        };
+        input.click();
+    }
+
+    toggleDrawing() {
+        this.drawingLayer.classList.toggle('drawing-active');
+        this.initializeDrawing();
+    }
+
+    initializeDrawing() {
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+
+        const draw = (e) => {
+            if (!isDrawing) return;
+            const x = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+            const y = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+            this.ctx.beginPath();
+            this.ctx.moveTo(lastX, lastY);
+            this.ctx.lineTo(x, y);
+            this.ctx.stroke();
+            [lastX, lastY] = [x, y];
+        };
+
+        const startDrawing = (e) => {
+            isDrawing = true;
+            [lastX, lastY] = [
+                e.type.includes('touch') ? e.touches[0].clientX : e.clientX,
+                e.type.includes('touch') ? e.touches[0].clientY : e.clientY
+            ];
+        };
+
+        const stopDrawing = () => {
+            isDrawing = false;
+        };
+
+        this.drawingLayer.addEventListener('mousedown', startDrawing);
+        this.drawingLayer.addEventListener('touchstart', startDrawing);
+        this.drawingLayer.addEventListener('mousemove', draw);
+        this.drawingLayer.addEventListener('touchmove', draw);
+        this.drawingLayer.addEventListener('mouseup', stopDrawing);
+        this.drawingLayer.addEventListener('touchend', stopDrawing);
+    }
+
+    saveState() {
+        const state = {
+            elements: Array.from(document.querySelectorAll('.draggable')).map(el => ({
+                type: el.dataset.type,
+                content: el.dataset.type === 'text' ? el.textContent : el.querySelector('img').src,
+                style: el.style.cssText
+            })),
+            drawing: this.drawingLayer.toDataURL()
+        };
+        localStorage.setItem('newspaperState', JSON.stringify(state));
+        alert('Project saved successfully!');
+    }
+
+    loadState() {
+        const state = JSON.parse(localStorage.getItem('newspaperState'));
+        if (state) {
+            this.workspace.innerHTML = '';
+            state.elements.forEach(el => {
+                const element = this.createDraggableElement(el.type, el.content);
+                element.style.cssText = el.style;
+            });
+            
+            const img = new Image();
+            img.onload = () => {
+                this.ctx.clearRect(0, 0, this.drawingLayer.width, this.drawingLayer.height);
+                this.ctx.drawImage(img, 0, 0);
+            };
+            img.src = state.drawing;
+        }
+    }
+}
+
+// Initialize the app
+document.addEventListener('DOMContentLoaded', () => {
+    new NewspaperCreatorPro();
+});
+
